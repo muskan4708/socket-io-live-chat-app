@@ -7,22 +7,109 @@ import {
   FormControl,
   Input,
   Spinner,
+  useToast,
   Button,
 } from "@chakra-ui/react";
-import { ArrowBackIcon, ArrowForwardIcon } from "@chakra-ui/icons";
+import { ArrowBackIcon } from "@chakra-ui/icons";
 import getSender from "../config/getSender";
 import getSenderFull from "../config/getSenderFull";
 import ProfileModel from "./ProfileModel";
 import UpdateGroupChatModel from "./UpdateGroupChatModel";
 import axios from "axios";
+import io from "socket.io-client";
 import ScrollableChat from "./scrollableChat";
+import animationData from "../animations/typing.json"
+import Lottie from "react-lottie";
+
+const ENDPOINT = "http://localhost:5000/";
+
+var socket, selectedChatCompare;
+
+
 
 const SingleChat = ({ fetchAgain, setfetchAgain }) => {
-  const { user, setSelectedChat, selectedChat } = ChatState();
+  const { user, setSelectedChat, selectedChat,notification,setNotification } = ChatState();
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [socketConnected, setSocketConnected] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const toast = useToast();
+ 
+//default optionns for typing handler abination
 
+  const defaultOptions = {
+    loop: true,
+    autoplay: true,
+    animationData: animationData,
+    rendererSettings: {
+      preserveAspectRatio: "xMidYMid slice",
+    },
+  };
+  // Initialize socket connection
+  useEffect(() => {
+    socket = io(ENDPOINT);
+    socket.emit("setup", user);
+    socket.on("connection", () => setSocketConnected(true));
+    socket.on("typing", () => setIsTyping(true));
+    socket.on("stop typing", () => setIsTyping(false));
+    // Cleanup on component unmount
+    return () => {
+      socket.disconnect();
+      socket.off();
+    };
+  }, [ENDPOINT, user]);
+
+  console.log("Notifcations********",notification)
+  // Handle incoming messages
+  useEffect(() => {
+    socket.on("message received", (newMessageReceived) => {
+      if (
+        !selectedChatCompare ||
+        selectedChatCompare._id !== newMessageReceived.chat._id
+      ) {
+if(!notification.includes(newMessageReceived)){
+  setNotification([...notification,newMessageReceived])
+  setfetchAgain(!fetchAgain)
+}
+        // Optionally show a notification here
+      } else {
+        setMessages((prevMessages) => [...prevMessages, newMessageReceived]);
+      }
+    });
+
+    // Cleanup on component unmount
+    return () => {
+      socket.off("message received");
+    };
+  }, [selectedChatCompare]);
+
+
+  const typingHandler=(e)=>{
+    //typing logic here
+    setNewMessage(e.target.value)
+    if(!setSocketConnected) return;
+
+    if(!typing){
+      setTyping(true)
+      socket.emit("typing",selectedChat._id)
+    }
+//debouncing 
+let lastTypingTime = new Date().getTime();
+var timerlength =3000
+setTimeout(()=>{
+
+  var timenow =new Date().getTime()
+  var timeDiff  =timenow -lastTypingTime;
+
+  if(timeDiff>=timerlength && typing){
+    socket.emit("stop typing",selectedChat._id)
+    setTyping(false)
+  }
+},timerlength)
+  }
+  // Send a new message
   const handleSendClick = async () => {
     if (newMessage.trim()) {
       try {
@@ -33,42 +120,81 @@ const SingleChat = ({ fetchAgain, setfetchAgain }) => {
             Authorization: `Bearer ${user.token}`,
           },
         };
-        console.log("newMessage", newMessage);
         const { data } = await axios.post(
           `http://localhost:5000/api/message/sendMessage`,
           { chatId: selectedChat._id, content: newMessage },
           config
         );
-        console.log("sent Message", data);
-        // setNewMessage("");
-        // setLoading(false);
+        setNewMessage("");
+        socket.emit("new message", data);
+        setMessages([...messages, data]);
+
+        toast({
+          title: "Message sent successfully!",
+          status: "success",
+          duration: 5000,
+          isClosable: true,
+          position: "bottom",
+        });
       } catch (error) {
+        toast({
+          title: "Message not sent!",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+          position: "bottom",
+        });
         console.error("Error sending message:", error);
+      } finally {
         setLoading(false);
       }
     }
   };
 
+  // Fetch chat messages
   const fetchChat = async () => {
-    const config = {
-      headers: {
-        Authorization: `Bearer ${user.token}`,
-      },
-    };
-    console.log("newMessage", newMessage);
-    const { data } = await axios.get(
-      `http://localhost:5000/api/message/${selectedChat._id}`,
+    if (!selectedChat) return;
+    try {
+      setLoading(true);
+      const config = {
+        headers: {
+          Authorization: `Bearer ${user.token}`,
+        },
+      };
+      const { data } = await axios.get(
+        `http://localhost:5000/api/message/${selectedChat._id}`,
+        config
+      );
+      setMessages(data);
+      socket.emit("join chat", selectedChat._id);
 
-      config
-    );
-    console.log("chats******** of the user", data);
-    // setNewMessage(data);
-    setLoading(false);
+      toast({
+        title: "Chats fetched!",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+        position: "bottom",
+      });
+    } catch (error) {
+      toast({
+        title: "Chats didn't fetch!",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+        position: "bottom",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Effect to fetch chat messages and set selected chat for comparison
   useEffect(() => {
+    setMessages([]);
     fetchChat();
-  }, [selectedChat]);
+    selectedChatCompare = selectedChat;
+  }, [selectedChat, fetchAgain]);
+
   return (
     <Box display="flex" flexDirection="column" h="100vh" w="100%">
       {selectedChat ? (
@@ -115,39 +241,49 @@ const SingleChat = ({ fetchAgain, setfetchAgain }) => {
             borderRadius="lg"
             overflowY="auto"
           >
-            <Box
-              p={1}
-              bg="white"
-              borderRadius="lg"
+            {loading ? (
+              <Spinner
+                size="xl"
+                w={20}
+                h={20}
+                alignSelf="center"
+                margin="auto"
+              />
+            ) : (
+              <ScrollableChat messages={messages} />
+            )}
+            <FormControl
               display="flex"
-              position="absoulte"
-              alignItems="center"
-              boxShadow="md"
-              marginTop="654"
-            >
-              {loading ? (
-                <Spinner
-                  size="xl"
-                  w={20}
-                  h={20}
-                  alignSelf="center"
-                  margin="auto"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendClick();
+              }}
+              mt={3}
+            > {isTyping?(
+            <> 
+              <Lottie  
+               options={defaultOptions}
+               width="70"
+               style={{marginBottom:15, }}
                 />
-              ) : (
-                <div>
-                  <ScrollableChat messages={messages} />
-                </div>
-              )}
-              <FormControl display="flex" onKeyDown={handleSendClick}>
-                <Input
-                  placeholder="Enter a new message"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  flex="1"
-                  mr={2}
-                />
-              </FormControl>
-            </Box>
+               
+                
+                </>):(<></>)}
+              <Input
+                placeholder="Enter a new message"
+                value={newMessage}
+                onChange={typingHandler}
+                flex="1"
+                mr={2}
+              />
+              <Button
+                colorScheme="teal"
+                onClick={handleSendClick}
+                isLoading={loading}
+              >
+                Send
+              </Button>
+            </FormControl>
           </Box>
         </>
       ) : (

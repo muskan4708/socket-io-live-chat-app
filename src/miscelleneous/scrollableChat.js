@@ -1,35 +1,46 @@
 import React from "react";
 import { ChatState } from "../context/ChatProvider";
 import ScrollableFeed from 'react-scrollable-feed';
-import { isSamesSender } from "../config/isSamesSender";
-import { isLastMessage } from "../config/isLastMessage";
 import { Avatar, Tooltip, Box, Text } from "@chakra-ui/react";
+import { isSamesSender } from "../config/isSamesSender";
+import isSameSenderMargin from "../config/isSameSenderMargin";
+import { isSameUser } from "../config/isSameUser";
+import isLastMessage from "../config/isLastMessage";
 
 function ScrollableChat({ messages }) {
-  
+  debugger;
   const { user } = ChatState();
-console.log("messages----------------",messages)
+ 
+  console.log("user", user);
+console.log("messages",messages)
   return (
     <ScrollableFeed>
       {messages && messages.map((m, i) => (
-        <div key={m._id} style={{ display: "flex", alignItems: "center", marginBottom: "8px" }}>
+        <Box
+          key={m._id}
+          display="flex"
+          justifyContent={m.sender._id === user._id ? "flex-end" : "flex-start"}
+          mb={2}
+        >
           {/* Show Tooltip and Avatar if the message is from the same sender or it's the last message */}
-          {(isSamesSender(messages, m, i, user._id) || isLastMessage(messages, i, user._id)) && (
+          {(isSamesSender(messages, m, i, user._id) || isLastMessage(messages, m, i, user._id)) && (
             <Tooltip label={m.sender.name} placement="bottom-start" hasArrow>
-              <Avatar name={m.sender.name} src={m.sender.avatar} />
+              <Avatar mt="7px" ml={1} name={m.sender.name} src={m.sender.pic} />
             </Tooltip>
           )}
           <Box
-            backgroundColor={m.sender._id === user._id ? "#BEE3F8" : "#F5F5F5"}
-            color={m.sender._id === user._id ? "black" : "black"}
+            bg={m.sender._id === user._id ? "#BEE3F8" : "#B9FBC0"}
+            color="black"
+            borderRadius="20px"
             p={3}
-            borderRadius="md"
             maxWidth="75%"
-            marginLeft={m.sender._id === user._id ? "auto" : "0"}
+            ml={isSameSenderMargin(messages, i, user._id)}
+            mt={isSameUser(messages, m, i, user._id) ? 3 : 10}
+            alignSelf={m.sender._id === user._id ? "flex-end" : "flex-start"}
           >
             <Text>{m.content}</Text>
           </Box>
-        </div>
+        </Box>
       ))}
     </ScrollableFeed>
   );

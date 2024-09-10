@@ -1,8 +1,9 @@
-export const isLastMessage =(messages , i,userId)=>{
+ const isLastMessage = (messages, i, userId) => {
+  return  i === messages.length - 1;
+    // i === messages.length - 1 &&
+    // messages[messages.length - 1].sender._id !== userId &&
+    // messages[messages.length - 1].sender._id
 
-    return(
-        i=== messages.length -1 &&
-        messages[messages.length -1].sender._id!==userId &&
-        messages[messages.length -1].sender._id
-    )
-}
+  
+};
+export default isLastMessage

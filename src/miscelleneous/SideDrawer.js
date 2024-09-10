@@ -20,7 +20,9 @@ import {
   useToast,
   Spinner,
 } from "@chakra-ui/react";
+import NotificationBadge, { Effect } from "react-notification-badge"
 import { BellIcon, ChevronDownIcon } from "@chakra-ui/icons";
+import getSender from "../config/getSender";
 import { ChatState } from "../context/ChatProvider";
 import ProfileModel from "./ProfileModel";
 import { useNavigate } from "react-router-dom";
@@ -32,18 +34,18 @@ function SideDrawer() {
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
-
+  
   const { isOpen, onOpen, onClose } = useDisclosure();
   const navigate = useNavigate();
   const toast = useToast();
-  const { user ,setSelectedChat,chats,setChats} = ChatState();
+  const { user, setSelectedChat, chats, setChats, notification, setNotification } = ChatState();
 
   const logoutUser = () => {
     localStorage.removeItem("userInfo");
-    window.location.reload();
     navigate("/homePage");
   };
-//Seacrh user api
+
+  // Search user API
   const handleSearch = async () => {
     if (!search) {
       toast({
@@ -82,36 +84,43 @@ function SideDrawer() {
     }
   };
 
-  //create chat appi
-const accessChat = async (userId) => {
+  // Access chat API
+  const accessChat = async (userId) => {
+    try {
+      if (!user || !user.token) {
+        throw new Error("User token is missing");
+      }
 
+      const config = {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+      };
 
-  try {
-    // Ensure user.token is available
-    if (!user || !user.token) {
-      throw new Error('User token is missing');
+      const { data } = await axios.post(
+        "http://localhost:5000/api/chat",
+        { userId },
+        config
+      );
+
+      if (!chats.find((c) => c._id === data._id)) {
+        setChats([data, ...chats]);
+      }
+
+      setSelectedChat(data);
+    } catch (error) {
+      console.error("Error accessing chat:", error);
+      toast({
+        title: "Error accessing chat",
+        description: error.message,
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
     }
+  };
 
-    const config = {
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${user.token}`,
-      },
-    };
-
-    const { data } = await axios.post("http://localhost:5000/api/chat", { userId }, config);
-if(!chats.find((c)=>c._id ===data._id))setChats([data,...chats])
-    console.log("Accessing chat with user ID:", userId);
-
-    setSelectedChat(data);
-  } catch (error) {
-    console.error("Error accessing chat:", error);
-    
-  } finally {
-    setLoading(false);
-
-  }
-};
   return (
     <>
       <Box
@@ -126,14 +135,9 @@ if(!chats.find((c)=>c._id ===data._id))setChats([data,...chats])
         justifyContent="center"
       >
         <Tooltip label="Search Users to chat" hasArrow placement="bottom-end">
-          <Button
-            variant="ghost"
-            position="absolute"
-            left="15px"
-            onClick={onOpen}
-          >
+          <Button variant="ghost" position="absolute" left="15px" onClick={onOpen}>
             <i className="fas fa-search"></i>
-            <Text d={{ base: "none", md: "inline" }} px={4}>
+            <Text display={{ base: "none", md: "inline" }} px={4}>
               Search User
             </Text>
           </Button>
@@ -146,19 +150,33 @@ if(!chats.find((c)=>c._id ===data._id))setChats([data,...chats])
         <Box position="absolute" top="0" right="0" mt={2} mr={4}>
           <Menu>
             <MenuButton p={1}>
+            <NotificationBadge 
+            count={notification.length}
+              effect={Effect.Scale}
+            />
               <BellIcon fontSize="2xl" />
             </MenuButton>
-            {/* You may want to add notification items here */}
+            <MenuList p={2}>
+              {!notification.length && "No New Messages"}
+              {notification.map((notif) => (
+                <MenuItem
+                  key={notif._id}
+                  onClick={() => {
+                    setSelectedChat(notif.chat);
+                    setNotification(notification.filter((item) => item._id !== notif._id));
+                  }}
+                >
+                  {notif.chat.isGroupChat
+                    ? `New Messages in ${notif.chat.chatName}`
+                    : `New Message from ${getSender(user, notif.chat.user)}`}
+                </MenuItem>
+              ))}
+            </MenuList>
           </Menu>
 
           <Menu>
             <MenuButton as={Button} rightIcon={<ChevronDownIcon />}>
-              <Avatar
-                size="sm"
-                cursor="pointer"
-                name={user.name}
-                src={user.pic}
-              />
+              <Avatar size="sm" cursor="pointer" name={user.name} src={user.pic} />
             </MenuButton>
             <MenuList>
               <ProfileModel user={user}>
@@ -171,12 +189,13 @@ if(!chats.find((c)=>c._id ===data._id))setChats([data,...chats])
           </Menu>
         </Box>
       </Box>
+
       <Drawer placement="left" onClose={onClose} isOpen={isOpen}>
         <DrawerOverlay />
         <DrawerContent>
           <DrawerHeader borderBottomWidth="1px">Search Users</DrawerHeader>
           <DrawerBody>
-            <Box d="flex" pb={2}>
+            <Box display="flex" pb={2}>
               <Input
                 placeholder="Search by name or email"
                 mr="2"
@@ -185,19 +204,14 @@ if(!chats.find((c)=>c._id ===data._id))setChats([data,...chats])
               />
               <Button onClick={handleSearch}>Go</Button>
             </Box>
+
             {loading ? (
-              <Chatloading />
-              
+              <Spinner display="flex" ml="auto" />
             ) : (
               searchResults.map((user) => (
-                <UserList
-                  key={user._id}
-                  handleFunc={() => accessChat(user._id)}
-                 user={user}
-                />
+                <UserList key={user._id} handleFunc={() => accessChat(user._id)} user={user} />
               ))
             )}
-            {loading && <Spinner d="flex" ml="auto"/>}
           </DrawerBody>
         </DrawerContent>
       </Drawer>

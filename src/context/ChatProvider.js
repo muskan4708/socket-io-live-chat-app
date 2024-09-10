@@ -4,21 +4,25 @@ import { useNavigate } from "react-router-dom";
 const ChatContext = createContext();
 const ChatProvider = ({ children }) => {
   const [user, setUser] = useState();
-const [selectedChat,setSelectedChat]= useState()
-const [chats,setChats]=useState([]);
-const navigate = useNavigate()
+  const [selectedChat, setSelectedChat] = useState();
+  const [chats, setChats] = useState([]);
+  const [notification,setNotification]=useState([])
+  const navigate = useNavigate();
 
   useEffect(() => {
+    //using use
     const userInfo = JSON.parse(localStorage.getItem("userInfo"));
     setUser(userInfo);
 
     if (!userInfo) {
-     alert("user not found")
-navigate ('/homePage')
+      alert("user not found");
+      navigate("/homePage");
     }
   }, []);
   return (
-    <ChatContext.Provider value={{ user, setUser ,selectedChat,setSelectedChat,chats,setChats}}>
+    <ChatContext.Provider
+      value={{ user, setUser, selectedChat, setSelectedChat, chats, setChats,notification,setNotification }}
+    >
       {children}
     </ChatContext.Provider>
   );
@@ -27,6 +31,5 @@ navigate ('/homePage')
 export const ChatState = () => {
   return useContext(ChatContext);
 };
-
 
 export default ChatProvider;
