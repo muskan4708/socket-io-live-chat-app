@@ -5,7 +5,11 @@
 /.pnp
 .pnp.js
 
+<<<<<<< HEAD
 # testing   r3r32e
+=======
+# testing
+>>>>>>> 3c9c6be (sever files)
 /coverage
 
 # production
